@@ -67,6 +67,7 @@ function throwRequired(msg: string) {
     throw new Error(msg + " is required");
 }
 
+const customDelarePath = 'file:///custom-declare.d.ts'
 function configMonaco(editor: any, customDeclare: any, nodeLibs?: any[]) {
     const monaco = window.monaco || throwRequired("monaco");
     const languages = monaco.languages || throwRequired("languages");
@@ -84,9 +85,6 @@ function configMonaco(editor: any, customDeclare: any, nodeLibs?: any[]) {
         }
     });
 
-    // Get custom declarations or use default
-    const declare = customDeclare || defaultDeclare;
-
     // Generate module declarations based on node's lib list
     const generateModuleDeclarations = (libs?: any[]): string => {
         if (!libs || libs.length === 0) return '';
@@ -101,38 +99,14 @@ function configMonaco(editor: any, customDeclare: any, nodeLibs?: any[]) {
     // Add Node-RED global types
     const nodeRedTypes = `
 /// <reference lib="es2022" />
+/// <reference lib="dom" />
 /// <reference types="node" />
 
 declare const require: NodeRequire;
-declare const Buffer: typeof globalThis.Buffer;
-declare const fetch: typeof globalThis.fetch;
 declare const util: typeof import('util');
-declare const URL: typeof globalThis.URL;
-declare const URLSearchParams: typeof globalThis.URLSearchParams;
-declare const Date: typeof globalThis.Date;
-declare const console: typeof globalThis.console;
-declare const setTimeout: typeof globalThis.setTimeout;
-declare const clearTimeout: typeof globalThis.clearTimeout;
-declare const setInterval: typeof globalThis.setInterval;
-declare const clearInterval: typeof globalThis.clearInterval;
 
 ${generateModuleDeclarations(nodeLibs)}
 
-declare const node: {
-    log: (message: string) => void;
-    warn: (message: string) => void;
-    error: (error: string | Error, message?: any) => void;
-    context: () => {
-        get: (key: string, store?: string) => any;
-        set: (key: string, value: any, store?: string) => void;
-        flow: any;
-        global: any;
-    };
-    send: (msg: any | any[]) => void;
-    id: string;
-    type: string;
-    name?: string;
-};
 declare const RED: {
     util: {
         getSetting: (node: any, key: string) => any;
@@ -158,13 +132,11 @@ interface MsgBase {
     [prop: string]: any;
 }
 interface Msg extends MsgBase {}
-
-${declare}
-
 declare const msg: Msg;
 `;
 
     tsConfig.addExtraLib(nodeRedTypes, "file:///node-red-types.d.ts");
+    tsConfig.addExtraLib(customDeclare ?? '', customDelarePath);
 
     // Only configure once per session
     if (!window.tsConfigured) {
@@ -313,7 +285,7 @@ function setEditor(editor: any) {
 }
 
 function resetDeclare(that: any) {
-    that.declareEditor.setValue(defaultDeclare);
+    that.declareEditor.setValue('');
 }
 
 const firstLower = (v: string) => v ? v[0].toLowerCase() + v.substring(1) : v;
@@ -565,7 +537,29 @@ function getLibsList() {
     return _libs;
 }
 
-const defaultDeclare = "interface Msg extends MsgBase {}";
+function removeExtraLib(filePath: string) {
+    const monaco = window.monaco;
+    if (!monaco) throw new Error("monaco not found");
+
+    const tsConfig = monaco.languages.typescript.typescriptDefaults;
+
+    // 1️⃣ 删除 editor model（如果存在）
+    const uri = monaco.Uri.parse(filePath);
+    const model = monaco.editor.getModel(uri);
+    if (model) model.dispose();
+
+    // 2️⃣ 删除 extraLib
+    const currentLibs: Record<string, any> = tsConfig.getExtraLibs();
+    const newLibsArray = Object.entries(currentLibs)
+        .filter(([path]) => path !== filePath)
+        .map(([path, lib]) => ({
+            filePath: path,
+            content: lib.content
+        }));
+
+    // 3️⃣ 覆盖到 tsConfig
+    tsConfig.setExtraLibs(newLibsArray);
+}
 
 RED.nodes.registerType("typescript", {
     color: "#61adff",
@@ -670,6 +664,9 @@ RED.nodes.registerType("typescript", {
                         that.editor.focus();
                     } else if (that.finalizeEditor.getDomNode() == editor[0]) {
                         that.finalizeEditor.focus();
+                    } else if (that.declareEditor.getDomNode() === editor[0]) {
+                        console.debug('hack declare editor error')
+                        removeExtraLib(customDelarePath)
                     }
                 }
             },
@@ -922,29 +919,6 @@ RED.nodes.registerType("typescript", {
         if (RED.settings.functionExternalModules !== false) {
             prepareLibraryConfig(that);
 
-            // Update TypeScript types when declarations change
-            if (this.declareEditor) {
-                this.declareEditor.on("change", function () {
-                    const newDeclare = that.declareEditor.getValue();
-                    // Update all Monaco editors with new declarations
-                    [that.editor, that.initEditor, that.finalizeEditor].forEach(
-                        function (editor) {
-                            if (editor && editor.type === "monaco") {
-                                try {
-                                    const nodeLibs = getLibsList();
-                                    configMonaco(editor, newDeclare, nodeLibs);
-                                } catch (error) {
-                                    console.warn(
-                                        "[TS] Failed to update declarations:",
-                                        error,
-                                    );
-                                }
-                            }
-                        },
-                    );
-                });
-            }
-
             // Add default modules button logic
             $("#node-add-default-modules").on("click", function () {
                 var libList = $("#node-input-libs-container");
@@ -977,11 +951,14 @@ RED.nodes.registerType("typescript", {
             defaultValue?: string,
         ) {
             var editor = node[editorName];
-            var annot = editor.getSession().getAnnotations();
-            for (var k = 0; k < annot.length; k++) {
-                if (annot[k].type === "error") {
-                    noerr += annot.length;
-                    break;
+            console.debug('hack validate error')
+            if (editorName !== 'declareEditor') {
+                var annot = editor.getSession().getAnnotations();
+                for (var k = 0; k < annot.length; k++) {
+                    if (annot[k].type === "error") {
+                        noerr += annot.length;
+                        break;
+                    }
                 }
             }
             var val = editor.getValue();

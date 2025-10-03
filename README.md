@@ -143,3 +143,9 @@ The editor provides comprehensive TypeScript support with:
 This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
 
 You are free to use this software in commercial environments, modify it, and distribute it without requiring to share your modifications.
+
+## Acknowledgments
+
+Special thanks to [@sheng-ri](https://github.com/sheng-ri) for the [fork](https://github.com/sheng-ri/node-red-contrib-ts) that contributed important fixes and improvements including:
+- No declare-error check on close.
+- Fixed duplicate type definition issue.
