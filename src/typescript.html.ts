@@ -126,13 +126,6 @@ declare const global: any;
 declare const env: {
     get: (key: string) => any;
 };
-interface MsgBase {
-    topic?: string;
-    payload?: any;
-    [prop: string]: any;
-}
-interface Msg extends MsgBase {}
-declare const msg: Msg;
 `;
 
     tsConfig.addExtraLib(nodeRedTypes, "file:///node-red-types.d.ts");

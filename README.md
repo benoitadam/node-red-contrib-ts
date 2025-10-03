@@ -69,8 +69,8 @@ interface ApiResponse {
     };
 }
 
-interface Msg extends MsgBase {
-    payload: {
+interface NodeMessage {
+    payload?: {
         userId: number;
         filter?: string;
     };
