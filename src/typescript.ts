@@ -27,6 +27,9 @@ interface Compilation {
     fin: () => Promise<void>;
 }
 
+const getTimeouts = (n: any) => n.timeoutTimers || (n.timeoutTimers = []);
+const getIntervals = (n: any) => n.intervalTimers || (n.intervalTimers = []);
+
 function compileTypeScript(node: Node, script: string): string {
     try {
         node.log(`Compiling TypeScript (${script.length} chars)`);
@@ -176,14 +179,14 @@ async function newCompilation(node: TsNode, comp: Compilation, def: TypeScriptNo
                     node.error(err, {});
                 }
             }, delayMs);
-            (node as any).outstandingTimers.push(id);
+            getTimeouts(node).push(id);
             return id;
         },
         clearTimeout: (id: any) => {
             clearTimeout(id);
-            var index = (node as any).outstandingTimers.indexOf(id);
+            const index = getTimeouts(node).indexOf(id);
             if (index > -1) {
-                (node as any).outstandingTimers.splice(index,1);
+                getTimeouts(node).splice(index, 1);
             }
         },
         setInterval: (handler: Function, delayMs?: number) => {
@@ -199,9 +202,9 @@ async function newCompilation(node: TsNode, comp: Compilation, def: TypeScriptNo
         },
         clearInterval: (id: any) => {
             clearInterval(id);
-            var index = (node as any).outstandingIntervals.indexOf(id);
+            const index = getIntervals(node).indexOf(id);
             if (index > -1) {
-                (node as any).outstandingIntervals.splice(index,1);
+                getIntervals(node).splice(index, 1);
             }
         },
     };
@@ -304,6 +307,14 @@ export = (RED: NodeAPI) => {
             } catch (error: any) {
                 this.error('Error in function finalize: ' + (error.stack || error.message));
             }
+
+            const timeouts = getTimeouts(this);
+            timeouts.forEach(clearTimeout);
+            timeouts.length = 0;
+
+            const intervals = getIntervals(this);
+            intervals.forEach(clearInterval);
+            intervals.length = 0;
 
             delete this.comp;
         });
